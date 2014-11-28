@@ -1,0 +1,55 @@
+.clearfix:after {
+	display: block;
+	clear: left;
+	content: " ";
+}
+
+.datepicker {
+	width: 100%;
+	min-height: 100px;
+	background-color: #FAFAFA;
+	color: #999999;
+	font: normal 16px 'Arial';
+	text-align: center;
+}
+
+.datepicker ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.datepicker ul li {
+	display: block;
+	float: left;
+	height: 100%;
+}
+
+.datepicker h1 {
+	margin: 0 0 10px;
+	font-size: 150%;
+}
+
+.datepicker .date {
+	overflow: hidden;
+	font-size: 150%;
+}
+
+.datepicker .date-list {
+	width: 300%;
+	margin-left: -100%;
+}
+
+.datepicker .date-list li {
+	width: 4.7619047%
+}
+
+.datepicker .date-list span {
+	display: block;
+	height: 40px;
+	line-height: 40px;
+}
+
+.datepicker .date-list .selected {
+	color: #31b7ff;
+}
