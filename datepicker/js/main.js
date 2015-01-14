@@ -12,12 +12,23 @@
 		noop = function() {},
 		mainTpl = [];
 
+	window.requestAnimationFrame = window.requestAnimationFrame ||
+								window.mozRequestAnimationFrame ||
+								window.webkitRequestAnimationFrame ||
+								window.msRequestAnimationFrame;
+
+	window.cancelAnimationFrame = window.cancelAnimationFrame ||
+								window.mozCancelAnimationFrame ||
+								window.webkitCancelAnimationFrame ||
+								window.msCancelAnimationFrame;
+
 	var cssPrefix = ['webkit', 'moz',  'ms', ''];
 
 	var defaults = {
 		container: 'body',
 		title: '{year}-{month}',
 		touchHold: 100,
+		selectedDate: new Date(),
 		selectCallback: function(year, month, date) {}
 	}
 
@@ -28,6 +39,10 @@
 	function isArray(arr) {
 		return ots.call(arr) === '[object Array]';
 	}
+
+	function easeOut(t, b, c, d){
+        return c*((t=t/d-1)*t*t + 1) + b;
+    }
 
 	function mixin(target, src) {
 		if(!isObject(target) || !isObject(src)) return target || src || {};
@@ -103,6 +118,7 @@
 			throw new Error('Container Is A Inavild Element!');
 		}
 		this.title = this.options.title;
+		this.selectedDate = this.options.selectedDate;
 		this.date = null;
 		this.init();
 	}
@@ -118,7 +134,7 @@
 		this._updateTitle(d.getFullYear(), d.getMonth() + 1);
 		d.setDate(d.getDate() - 7 - d.getDay());
 		for(var i = 0; i < $lis.length; i++) {
-			$lis[i].setAttribute('data-date', [d.getFullYear(), d.getMonth() + 1, d.getDate()].join('/'))
+			$lis[i].setAttribute('data-date', Number(d))
 			$lis[i].querySelector('.day').innerText = d.getDate();
 			d.setDate(d.getDate() + 1);
 		}
@@ -146,6 +162,7 @@
 			lw = 100 / 21,
 			moving = false,
 			touchTimer = 0,
+			touchStartTime = 0,
 			self = this,
 			oldOffsetX = 0, 
 			newOffsetX = 0,
@@ -162,7 +179,8 @@
 			evt.preventDefault();
 			oldOffsetX = getTranslate($dl).x;
 			newOffsetX = oldOffsetX,
-			startX = evt.touches[0].pageX;
+			startX = evt.touches[0].pageX,
+			touchStartTime = Number(new Date());
 			var target = evt.target;
 			do {
 				if(target.nodeName === 'LI') {
@@ -174,9 +192,8 @@
 						var $select = $dl.querySelectorAll('.selected')[0];
 						$select && $select.classList.remove('selected');
 						target.classList.add('selected');
-						//$($this).addClass('selected').siblings().removeClass('selected');
-						//var date = $($this).data('date');
-						//options.selectCallback && options.selectCallback(date[0], date[1], date[2]);
+						self.selectedDate = new Date(+target.getAttribute('data-date'));
+						options.selectCallback && options.selectCallback(self.selectedDate.getFullYear(), self.selectedDate.getMonth(), self.selectedDate.getDate());
 					}, options.touchHold);
 					break;
 				}
@@ -185,10 +202,28 @@
 
 		$dl.addEventListener('touchend', function(evt) {
 			evt.preventDefault();
-			var _newOffset = Math.round(newOffsetX / lw) * lw,
-				nOfl = Math.round((_newOffset - oldOffsetX) / lw),
-				date = self.date;
-			
+			var //_newOffset = Math.round(newOffsetX / lw) * lw,
+				//nOfl = Math.round((_newOffset - oldOffsetX) / lw),
+				date = self.date,
+				selectedDate = self.selectedDate,
+				offsetTime = (Number(new Date()) - touchStartTime) / 1000,
+				//acceleratedSpeed = 2 * (newOffsetX - oldOffsetX) / Math.pow(offsetTime, 2),
+				speed = 2 * (newOffsetX - oldOffsetX) / offsetTime,
+				distance = 0.5 * Math.pow(speed, 2) / 1000,
+				endOffsetX = speed < 0 ? newOffsetX - distance : newOffsetX + distance,
+				start = Number(new Date()),
+				during = 450;
+			var run = function() {
+				var t = Number(new Date()) - start;
+				if(t > during) {
+					return;
+				}
+				var result = easeOut(t, newOffsetX, endOffsetX - newOffsetX, during);
+				setTranslate($dl, result, 0, 0, 0);
+				requestAnimationFrame(run);
+			}
+			run();
+			/*	
 			if(nOfl > 1) {
 				var total = $dl.children.length,
 					$lis = slice.call($dl.children, total - nOfl, total);
@@ -196,8 +231,12 @@
 				detach($dl, $lis);
 				for(var i = 0; i < $lis.length; i++) {
 					date.setDate(date.getDate() + 1);
-					$lis[i].setAttribute('data-date', [date.getFullYear(), date.getMonth() + 1, date.getDate()].join('/'));
+					$lis[i].classList.remove('selected');
+					$lis[i].setAttribute('data-date', +date);
 					$lis[i].querySelector('.day').innerText = date.getDate();
+					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
+						$lis[i].classList.add('selected');
+					}
 				}
 				attach($dl, $lis);
 				date.setDate(date.getDate() + total - nOfl);
@@ -205,15 +244,20 @@
 				var $lis = slice.call($dl.children, 0, -nOfl);
 				detach($dl, $lis);
 				for(var i = 0; i < $lis.length; i++) {
-					$lis[i].setAttribute('data-date', [date.getFullYear(), date.getMonth() + 1, date.getDate()].join('/'));
+					$lis[i].classList.remove('selected');
+					$lis[i].setAttribute('data-date', Number(date));
 					$lis[i].querySelector('.day').innerText = date.getDate();
+					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
+						$lis[i].classList.add('selected');
+					}
 					date.setDate(date.getDate() + 1);
 				}
 				attach($dl, $lis, true);
 			}
 			setTranslate($dl, '-33.33333', 0, 0, 0);
-			var d = $dl.querySelectorAll('li')[7].getAttribute('data-date').split('/');
-			self._updateTitle(d[0], d[1]);
+			var d = new Date(Number($dl.querySelectorAll('li')[7].getAttribute('data-date')));
+			self._updateTitle(d.getFullYear(), d.getMonth() + 1);
+			*/
 			moving = false;
 		});
 	}
