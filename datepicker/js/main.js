@@ -92,6 +92,20 @@
 		return valid && getTranslate(ele);
 	}
 
+	function setTransition(ele, css) {
+		var valid = !cssPrefix.every(function(prefix) {
+			var name = prefix ? prefix + 'Transition' : 'transition';
+			if(name in ele.style) {
+				setTransition = function(ele, css) {
+					ele.style[name] = css;
+				}
+				return false;
+			}
+			return true;
+		});
+		valid && setTransition(ele, css);
+	}
+
 	function detach(parent, nodes) {
 		var len = nodes.length;
 		for(var i = 0; i < len; i++) {
@@ -119,7 +133,9 @@
 		}
 		this.title = this.options.title;
 		this.selectedDate = this.options.selectedDate;
-		this.date = null;
+		this.date = this.options.date || new Date();
+		this.date = new Date(this.date.getFullYear(), this.date.getMonth(), this.date.getDate());
+		this.selectedDate = new Date(this.selectedDate.getFullYear(), this.selectedDate.getMonth(), this.selectedDate.getDate());
 		this.init();
 	}
 
@@ -129,13 +145,16 @@
 	}
 
 	DatePicker.prototype.initUI = function() {
-		var d = this.options.date || new Date(),
+		var d = this.date,
 			$lis = this.$container.querySelector('.date-list').children;
 		this._updateTitle(d.getFullYear(), d.getMonth() + 1);
 		d.setDate(d.getDate() - 7 - d.getDay());
 		for(var i = 0; i < $lis.length; i++) {
 			$lis[i].setAttribute('data-date', Number(d))
 			$lis[i].querySelector('.day').innerText = d.getDate();
+			if(this.selectedDate && Math.abs(Number(d) - Number(this.selectedDate)) < 86400000) {
+				$lis[i].classList.add('selected');
+			}
 			d.setDate(d.getDate() + 1);
 		}
 		this.date = d;
@@ -155,6 +174,7 @@
 		return s.substring(s.length - size);
 	}
 
+
 	DatePicker.prototype.bindEvents = function() {
 		var $dl = this.$container.querySelector('.date-list'),
 			offsetWidth = $dl.offsetWidth,
@@ -165,22 +185,62 @@
 			touchStartTime = 0,
 			self = this,
 			oldOffsetX = 0, 
-			newOffsetX = 0,
-			startX = 0;
+			currentOffsetX = 0,
+			startX = 0,
+			stopAnimated = false;
+
+		var updateUI = function(nOfl) {
+			var date = self.date,
+				selectedDate = self.selectedDate;
+			if(nOfl > 0) {
+				var total = $dl.children.length,
+					$lis = slice.call($dl.children, total - nOfl, total);
+				date.setDate(date.getDate() - total - nOfl);
+				detach($dl, $lis);
+				for(var i = 0; i < $lis.length; i++) {
+					date.setDate(date.getDate() + 1);
+					$lis[i].classList.remove('selected');
+					$lis[i].setAttribute('data-date', +date);
+					$lis[i].querySelector('.day').innerText = date.getDate();
+					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
+						console.log(date, selectedDate);
+						$lis[i].classList.add('selected');
+					}
+				}
+				attach($dl, $lis);
+				date.setDate(date.getDate() + total - nOfl);
+			} else if(nOfl < 0) {
+				var $lis = slice.call($dl.children, 0, -nOfl);
+				detach($dl, $lis);
+				for(var i = 0; i < $lis.length; i++) {
+					$lis[i].classList.remove('selected');
+					$lis[i].setAttribute('data-date', Number(date));
+					$lis[i].querySelector('.day').innerText = date.getDate();
+					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
+						console.log(date, selectedDate);
+						$lis[i].classList.add('selected');
+					}
+					date.setDate(date.getDate() + 1);
+				}
+				attach($dl, $lis, true);
+			}
+		}
 
 		$dl.addEventListener('touchmove', function(evt) {
 			evt.preventDefault();
 			moving = true;
-			newOffsetX = oldOffsetX + (evt.touches[0].pageX - startX) * 100 / offsetWidth;
-			setTranslate($dl, newOffsetX, 0, 0);
+			currentOffsetX = oldOffsetX + (evt.touches[0].pageX - startX) * 100 / offsetWidth;
+			setTranslate($dl, currentOffsetX, 0, 0);
 		});
 
 		$dl.addEventListener('touchstart', function(evt) {
 			evt.preventDefault();
 			oldOffsetX = getTranslate($dl).x;
-			newOffsetX = oldOffsetX,
-			startX = evt.touches[0].pageX,
+			currentOffsetX = oldOffsetX;
+			startX = evt.touches[0].pageX;
 			touchStartTime = Number(new Date());
+			setTransition($dl, '');
+			stopAnimated = true;
 			var target = evt.target;
 			do {
 				if(target.nodeName === 'LI') {
@@ -191,6 +251,7 @@
 						}
 						var $select = $dl.querySelectorAll('.selected')[0];
 						$select && $select.classList.remove('selected');
+						console.log($select);
 						target.classList.add('selected');
 						self.selectedDate = new Date(+target.getAttribute('data-date'));
 						options.selectCallback && options.selectCallback(self.selectedDate.getFullYear(), self.selectedDate.getMonth(), self.selectedDate.getDate());
@@ -202,63 +263,43 @@
 
 		$dl.addEventListener('touchend', function(evt) {
 			evt.preventDefault();
-			var //_newOffset = Math.round(newOffsetX / lw) * lw,
-				//nOfl = Math.round((_newOffset - oldOffsetX) / lw),
-				date = self.date,
-				selectedDate = self.selectedDate,
+			var	date = self.date,
+				selectedDate = self.selectedDate;
 				offsetTime = (Number(new Date()) - touchStartTime) / 1000,
-				//acceleratedSpeed = 2 * (newOffsetX - oldOffsetX) / Math.pow(offsetTime, 2),
-				speed = 2 * (newOffsetX - oldOffsetX) / offsetTime,
-				distance = 0.5 * Math.pow(speed, 2) / 1000,
-				endOffsetX = speed < 0 ? newOffsetX - distance : newOffsetX + distance,
+				pass = Math.round((currentOffsetX - oldOffsetX) / lw);
+				speed = pass / offsetTime,
+				distance = Math.min(Math.round(0.5 * Math.pow(speed, 2) / 50), 7),
+				nOfl = pass < 0 ?  pass - distance : distance + pass,
 				start = Number(new Date()),
-				during = 450;
+				during = 300;
+
+			stopAnimated = false;
+			updateUI(nOfl);
+			currentOffsetX = currentOffsetX - nOfl * lw;
+			setTranslate($dl, currentOffsetX, 0, 0);
+
+			/*
+			setTimeout(function() {
+				setTransition($dl, 'all .3s ease');
+				setTranslate($dl, -33.3333);
+			}, 0);
+			*/
+			
 			var run = function() {
 				var t = Number(new Date()) - start;
-				if(t > during) {
+				if(t > during || stopAnimated) {
+					moving = false;
+					var d = new Date(Number($dl.querySelectorAll('li')[7].getAttribute('data-date')));
+					self._updateTitle(d.getFullYear(), d.getMonth() + 1);
 					return;
 				}
-				var result = easeOut(t, newOffsetX, endOffsetX - newOffsetX, during);
+				var result = easeOut(t, currentOffsetX, -33.33333 - currentOffsetX, during);
+				oldOffsetX = result;
 				setTranslate($dl, result, 0, 0, 0);
 				requestAnimationFrame(run);
 			}
 			run();
-			/*	
-			if(nOfl > 1) {
-				var total = $dl.children.length,
-					$lis = slice.call($dl.children, total - nOfl, total);
-				date.setDate(date.getDate() - total - nOfl);
-				detach($dl, $lis);
-				for(var i = 0; i < $lis.length; i++) {
-					date.setDate(date.getDate() + 1);
-					$lis[i].classList.remove('selected');
-					$lis[i].setAttribute('data-date', +date);
-					$lis[i].querySelector('.day').innerText = date.getDate();
-					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
-						$lis[i].classList.add('selected');
-					}
-				}
-				attach($dl, $lis);
-				date.setDate(date.getDate() + total - nOfl);
-			} else if(nOfl < -1) {
-				var $lis = slice.call($dl.children, 0, -nOfl);
-				detach($dl, $lis);
-				for(var i = 0; i < $lis.length; i++) {
-					$lis[i].classList.remove('selected');
-					$lis[i].setAttribute('data-date', Number(date));
-					$lis[i].querySelector('.day').innerText = date.getDate();
-					if(selectedDate && Math.abs(Number(date) - Number(selectedDate)) < 86400000) {
-						$lis[i].classList.add('selected');
-					}
-					date.setDate(date.getDate() + 1);
-				}
-				attach($dl, $lis, true);
-			}
-			setTranslate($dl, '-33.33333', 0, 0, 0);
-			var d = new Date(Number($dl.querySelectorAll('li')[7].getAttribute('data-date')));
-			self._updateTitle(d.getFullYear(), d.getMonth() + 1);
-			*/
-			moving = false;
+			
 		});
 	}
 	return DatePicker;
