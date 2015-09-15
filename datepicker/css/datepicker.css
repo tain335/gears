@@ -30,7 +30,7 @@
 	font-size: 150%;
 }
 
-.datepicker .date {
+.datepicker .date-container {
 	overflow: hidden;
 	font-size: 150%;
 }
@@ -50,6 +50,24 @@
 	line-height: 40px;
 }
 
-.datepicker .date-list .selected {
-	color: #31b7ff;
+.datepicker .day {
+	position: relative;
+	z-index: 1;
+}
+
+.datepicker .selected .day {
+	color: #fff;
+}
+
+.datepicker .selected .day:after {
+	content: " ";
+	position: absolute;
+	top: 0;
+	left: 50%;
+	z-index: -1;
+	width: 40px;
+	height: 40px;
+	margin-left: -20px;
+	border-radius: 50%;
+	background-color: #31b7ff;
 }
